@@ -7,9 +7,14 @@ import aiosmtplib
 from email.message import EmailMessage
 import os
 
+from database import get_db_connection
+from models.AdminAction import AdminAction
 from models.croprequest import CropRequest
+from models.deleteUser import DeleteUserRequest
 from models.emailrequest import EmailRequest
 from models.soildatainput import SoilDataInput
+from models.userCreate import UserCreate
+from models.userUpdate import UserUpdate
 from models.userlogin import UserLogin
 from models.usersignup import UserSignup
 
@@ -17,15 +22,15 @@ from models.usersignup import UserSignup
 app = FastAPI()
 
 # Email Configuration (Use an App Password for Gmail)
-# SMTP_SERVER = "smtp.gmail.com"
-# SMTP_PORT = 587
-# EMAIL_SENDER = "farhan017kabir@gmail.com"
-# EMAIL_PASSWORD = "lerf wmws nmvc cbhv"
+SMTP_SERVER = "smtp.gmail.com"
+SMTP_PORT = 587
+EMAIL_SENDER = "farhan017kabir@gmail.com"
+EMAIL_PASSWORD = "lerf wmws nmvc cbhv"
 
-SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
-SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
-EMAIL_SENDER = os.getenv("EMAIL_SENDER")
-EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
+# SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
+# SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
+# EMAIL_SENDER = os.getenv("EMAIL_SENDER")
+# EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
 
 
 # CORS configuration
@@ -37,42 +42,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# MySQL database configuration
-# db_config = {
-#     "host": "localhost",
-#     "user": "root",
-#     "password": "",
-#     "database": "crop_and_fertilizer_recommendation_db",
-#     "port": 4306,
-# }
-
-# db_config = {
-#     "host": "bepjd6wyxkg8i157jrtn-mysql.services.clever-cloud.com",
-#     "user": "ux3pl9tv87elba36",
-#     "password": "nQjG2mZ3xUSIdLePpbKg",
-#     "database": "bepjd6wyxkg8i157jrtn",
-#     "port": 3306,
-# }
-
-db_config = {
-    "host": os.getenv("DB_HOST"),
-    "user": os.getenv("DB_USER"),
-    "password": os.getenv("DB_PASSWORD"),
-    "database": os.getenv("DB_NAME"),
-    "port": int(os.getenv("DB_PORT", 3306)),
-}
-
 # Password hashing context
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-
-# Connect to the database
-def get_db_connection():
-    try:
-        conn = mysql.connector.connect(**db_config)
-        return conn
-    except mysql.connector.Error as e:
-        raise HTTPException(status_code=500, detail=f"Database connection error: {str(e)}")
 
 
 # Hash a password
@@ -100,8 +71,8 @@ async def signup(user: UserSignup):
         # Insert the new user
         hashed_password = hash_password(user.password)
         cursor.execute(
-            "INSERT INTO users (email, username, password) VALUES (%s, %s, %s)",
-            (user.email, user.username, hashed_password),
+            "INSERT INTO users (email, username, password,is_admin) VALUES (%s, %s, %s, %s)",
+            (user.email, user.username, hashed_password,0),
         )
         conn.commit()
 
@@ -262,6 +233,243 @@ async def send_email(request: EmailRequest):
         return {"message": "Email sent successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error sending email: {str(e)}")
+
+
+# Helper function to check if a user is an admin
+def is_admin(email: str):
+    """Check if the user with given email is an admin."""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    cursor.execute("SELECT is_admin FROM users WHERE email = %s", (email,))
+    user = cursor.fetchone()
+
+    cursor.close()
+    conn.close()
+
+    if not user or user["is_admin"] != 1:
+        raise HTTPException(status_code=403, detail="Access denied. Admin rights required.")
+
+
+@app.post("/admin/login")
+async def admin_login(user: UserLogin):
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        # Fetch the user by email and check if they are an admin
+        cursor.execute(
+            "SELECT * FROM users WHERE email = %s AND is_admin = 1",
+            (user.email,)
+        )
+        admin_user = cursor.fetchone()
+
+        if not admin_user or not verify_password(user.password, admin_user["password"]):
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid email or password or not an admin user"
+            )
+
+        return {
+            "message": "Admin login successful",
+            "username": admin_user["username"],
+            "is_admin": True
+        }
+
+    except mysql.connector.Error as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cursor.close()
+        conn.close()
+
+# ✅ Create a new user
+@app.post("/admin/create-user/")
+async def create_user(user: UserCreate):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # Hash the password
+    hashed_password = pwd_context.hash(user.password)
+
+    # Insert the user
+    cursor.execute("INSERT INTO users (username, email, password, is_admin) VALUES (%s, %s, %s, %s)",
+                   (user.username, user.email, hashed_password, 0))
+    conn.commit()
+
+    cursor.close()
+    conn.close()
+
+    return {"message": "User created successfully"}
+
+
+# ✅ Get all users
+@app.get("/admin/users/")
+async def get_users():
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    cursor.execute("SELECT id, username, email, is_admin FROM users")
+    users = cursor.fetchall()
+
+    cursor.close()
+    conn.close()
+
+    return {"users": users}
+
+
+# ✅ Update username or password
+@app.put("/admin/update-user/")
+async def update_user(user_update: UserUpdate):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    if user_update.new_username:
+        cursor.execute("UPDATE users SET username = %s WHERE username = %s", (user_update.new_username, user_update.username,))
+
+    if user_update.new_password:
+        hashed_password = pwd_context.hash(user_update.new_password)
+        cursor.execute("UPDATE users SET password = %s WHERE username = %s", (hashed_password, user_update.username,))
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    return {"message": "User details updated successfully"}
+
+
+# ✅ Delete a user
+# @app.delete("/admin/delete-user/{user_id}")
+# async def delete_user(user_id: int):
+#     conn = get_db_connection()
+#     cursor = conn.cursor()
+#
+#     cursor.execute("DELETE FROM users WHERE id = %s", (user_id,))
+#     conn.commit()
+#
+#     cursor.close()
+#     conn.close()
+#
+#     return {"message": "User deleted successfully"}
+
+@app.delete("/admin/delete-user/")
+async def delete_user(request: DeleteUserRequest):
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # Check if the user exists
+        cursor.execute("SELECT * FROM users WHERE username = %s", (request.username,))
+        user = cursor.fetchone()
+
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        # Delete the user
+        cursor.execute("DELETE FROM users WHERE username = %s", (request.username,))
+        conn.commit()
+
+        return {"message": "User deleted successfully"}
+    except mysql.connector.Error as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cursor.close()
+        conn.close()
+
+
+# ✅ Promote a user to admin
+# @app.put("/admin/promote-user/")
+# async def promote_user(action: AdminAction):
+#     is_admin(action.admin_email)  # Check if requester is admin
+#
+#     conn = get_db_connection()
+#     cursor = conn.cursor()
+#
+#     cursor.execute("SELECT * FROM users WHERE id = %s", (action.target_user_id,))
+#     user = cursor.fetchone()
+#
+#     if not user:
+#         raise HTTPException(status_code=404, detail="User not found")
+#
+#     cursor.execute("UPDATE users SET is_admin = 1 WHERE id = %s", (action.target_user_id,))
+#     conn.commit()
+#
+#     cursor.close()
+#     conn.close()
+#
+#     return {"message": "User promoted to admin successfully"}
+
+@app.put("/admin/promote-user/")
+async def promote_user(action: AdminAction):
+    is_admin(action.admin_email)  # Check if requester is admin
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # Check if the target user exists using username
+    cursor.execute("SELECT * FROM users WHERE username = %s", (action.username,))
+    user = cursor.fetchone()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Promote user to admin
+    cursor.execute("UPDATE users SET is_admin = 1 WHERE username = %s", (action.username,))
+    conn.commit()
+
+    cursor.close()
+    conn.close()
+
+    return {"message": f"User '{action.username}' promoted to admin successfully"}
+
+
+
+
+# ✅ Demote an admin to normal user
+# @app.put("/admin/demote-user/")
+# async def demote_user(action: AdminAction):
+#     is_admin(action.admin_email)  # Check if requester is admin
+#
+#     conn = get_db_connection()
+#     cursor = conn.cursor()
+#
+#     cursor.execute("SELECT * FROM users WHERE id = %s AND is_admin = 1", (action.target_user_id,))
+#     user = cursor.fetchone()
+#
+#     if not user:
+#         raise HTTPException(status_code=404, detail="User not found or not an admin")
+#
+#     cursor.execute("UPDATE users SET is_admin = 0 WHERE id = %s", (action.target_user_id,))
+#     conn.commit()
+#
+#     cursor.close()
+#     conn.close()
+#
+#     return {"message": "Admin demoted to normal user successfully"}
+
+@app.put("/admin/demote-user/")
+async def demote_user(action: AdminAction):
+    is_admin(action.admin_email)  # Check if requester is admin
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # Check if the user exists
+    cursor.execute("SELECT * FROM users WHERE username = %s", (action.username,))
+    user = cursor.fetchone()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Demote user to normal user
+    cursor.execute("UPDATE users SET is_admin = 0 WHERE username = %s", (action.username,))
+    conn.commit()
+
+    cursor.close()
+    conn.close()
+
+    return {"message": f"User with email '{action.username}' has been demoted successfully"}
+
+
 
 
 # Root endpoint for testing
