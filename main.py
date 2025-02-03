@@ -144,14 +144,6 @@ async def get_recommendations(request: CropRequest):
         result = cursor.fetchone()
 
         if result:
-            # Return a detailed response
-            # return {
-            #     "fertilizer": result["fertilizer"],
-            #     "soil": result["soil"],
-            #     "ideal_ph": result["ideal_ph"],
-            #     "ideal_humidity": result["ideal_humidity"],
-            #     "natural_fertilizer_tips": result["natural_fertilizer_tips"],
-            # }
             return result
         else:
             raise HTTPException(status_code=404, detail="Crop not found")
