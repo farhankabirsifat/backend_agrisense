@@ -1,3 +1,4 @@
+import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from passlib.context import CryptContext
@@ -14,13 +15,11 @@ from models.usersignup import UserSignup
 # Initialize FastAPI app
 app = FastAPI()
 
-
 # Email Configuration (Use an App Password for Gmail)
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
 EMAIL_SENDER = "farhan017kabir@gmail.com"
 EMAIL_PASSWORD = "lerf wmws nmvc cbhv"
-
 
 # CORS configuration
 app.add_middleware(
@@ -144,14 +143,6 @@ async def get_recommendations(request: CropRequest):
         result = cursor.fetchone()
 
         if result:
-            # Return a detailed response
-            # return {
-            #     "fertilizer": result["fertilizer"],
-            #     "soil": result["soil"],
-            #     "ideal_ph": result["ideal_ph"],
-            #     "ideal_humidity": result["ideal_humidity"],
-            #     "natural_fertilizer_tips": result["natural_fertilizer_tips"],
-            # }
             return result
         else:
             raise HTTPException(status_code=404, detail="Crop not found")
@@ -262,3 +253,8 @@ async def send_email(request: EmailRequest):
 @app.get("/")
 async def root():
     return {"message": "Welcome to the Crop Recommendation API"}
+
+
+# Entry point for Render deployment
+if __name__ == "__main__":
+    uvicorn.run("main:app", host="0.0.0.0", port=10000, reload=True)
