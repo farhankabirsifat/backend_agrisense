@@ -5,6 +5,7 @@ from passlib.context import CryptContext
 import mysql.connector
 import aiosmtplib
 from email.message import EmailMessage
+import os
 
 from models.croprequest import CropRequest
 from models.emailrequest import EmailRequest
@@ -16,10 +17,16 @@ from models.usersignup import UserSignup
 app = FastAPI()
 
 # Email Configuration (Use an App Password for Gmail)
-SMTP_SERVER = "smtp.gmail.com"
-SMTP_PORT = 587
-EMAIL_SENDER = "farhan017kabir@gmail.com"
-EMAIL_PASSWORD = "lerf wmws nmvc cbhv"
+# SMTP_SERVER = "smtp.gmail.com"
+# SMTP_PORT = 587
+# EMAIL_SENDER = "farhan017kabir@gmail.com"
+# EMAIL_PASSWORD = "lerf wmws nmvc cbhv"
+
+SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
+SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
+EMAIL_SENDER = os.getenv("EMAIL_SENDER")
+EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
+
 
 # CORS configuration
 app.add_middleware(
@@ -39,12 +46,20 @@ app.add_middleware(
 #     "port": 4306,
 # }
 
+# db_config = {
+#     "host": "bepjd6wyxkg8i157jrtn-mysql.services.clever-cloud.com",
+#     "user": "ux3pl9tv87elba36",
+#     "password": "nQjG2mZ3xUSIdLePpbKg",
+#     "database": "bepjd6wyxkg8i157jrtn",
+#     "port": 3306,
+# }
+
 db_config = {
-    "host": "bepjd6wyxkg8i157jrtn-mysql.services.clever-cloud.com",
-    "user": "ux3pl9tv87elba36",
-    "password": "nQjG2mZ3xUSIdLePpbKg",
-    "database": "bepjd6wyxkg8i157jrtn",
-    "port": 3306,
+    "host": os.getenv("DB_HOST"),
+    "user": os.getenv("DB_USER"),
+    "password": os.getenv("DB_PASSWORD"),
+    "database": os.getenv("DB_NAME"),
+    "port": int(os.getenv("DB_PORT", 3306)),
 }
 
 # Password hashing context
