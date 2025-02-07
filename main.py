@@ -22,15 +22,15 @@ from models.usersignup import UserSignup
 app = FastAPI()
 
 # Email Configuration (Use an App Password for Gmail)
-SMTP_SERVER = "smtp.gmail.com"
-SMTP_PORT = 587
-EMAIL_SENDER = "farhan017kabir@gmail.com"
-EMAIL_PASSWORD = "lerf wmws nmvc cbhv"
+# SMTP_SERVER = "smtp.gmail.com"
+# SMTP_PORT = 587
+# EMAIL_SENDER = "farhan017kabir@gmail.com"
+# EMAIL_PASSWORD = "lerf wmws nmvc cbhv"
 
-# SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
-# SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
-# EMAIL_SENDER = os.getenv("EMAIL_SENDER")
-# EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
+SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
+SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
+EMAIL_SENDER = os.getenv("EMAIL_SENDER")
+EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
 
 
 # CORS configuration
